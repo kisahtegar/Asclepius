@@ -1,21 +1,35 @@
 package com.dicoding.asclepius.view
 
-import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import com.dicoding.asclepius.R
 import com.dicoding.asclepius.databinding.ActivityMainBinding
+import com.dicoding.asclepius.helper.ImageClassifierHelper
+import com.dicoding.asclepius.models.ResultItem
+import org.tensorflow.lite.task.vision.classifier.Classifications
 
+/**
+ * The main activity of the application responsible for image selection and analysis.
+ *
+ * This activity allows users to select an image from the device gallery and analyze it
+ * using an image classifier. Once the analysis is complete, the results are displayed
+ * in the ResultActivity.
+ */
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
+    // URI of the currently selected image
     private var currentImageUri: Uri? = null
+
+    // Helper class for image classification
+    private lateinit var imageClassifierHelper: ImageClassifierHelper
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,6 +37,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.galleryButton.setOnClickListener{ startGallery() }
+        binding.analyzeButton.setOnClickListener {
+            currentImageUri?.let {
+                analyzeImage(it)
+            } ?: run {
+                showToast(getString(R.string.empty_image_warning))
+            }
+        }
     }
 
     /**
@@ -75,16 +96,92 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun analyzeImage() {
-        // TODO: Menganalisa gambar yang berhasil ditampilkan.
+    /**
+     * Initiates the image analysis process using the selected image URI.
+     *
+     * This function starts the image analysis process by initializing an [ImageClassifierHelper]
+     * instance and calling its [ImageClassifierHelper.classifyStaticImage] method with the provided
+     * image URI. It also sets up a listener to handle classification results and errors.
+     *
+     * @param imageUri The URI of the selected image to be analyzed.
+     */
+    private fun analyzeImage(imageUri: Uri) {
+        // Show progress indicator while processing the image
+        binding.progressIndicator.visibility = View.VISIBLE
+
+        // Initialize the ImageClassifierHelper
+        imageClassifierHelper = ImageClassifierHelper(
+            context = this,
+            classifierListener = object : ImageClassifierHelper.ClassifierListener {
+
+                /**
+                 * Callback function invoked when an error occurs during image classification.
+                 * Hides the progress indicator and displays an error message.
+                 *
+                 * @param error The error message describing the failure.
+                 */
+                override fun onError(error: String) {
+                    // Hide progress indicator
+                    binding.progressIndicator.visibility = View.GONE
+                    // Show error message
+                    showToast(error)
+                }
+
+                /**
+                 * Callback function invoked when classification results are available.
+                 * Hides the progress indicator and moves to the ResultActivity to display the results.
+                 *
+                 * @param results The list of classification results.
+                 */
+                override fun onResults(results: List<Classifications>?) {
+                    // Hide progress indicator
+                    binding.progressIndicator.visibility = View.GONE
+                    // Move to ResultActivity with classification results
+                    moveToResult(results)
+                }
+            }
+        )
+
+        // Classify the static image
+        imageClassifierHelper.classifyStaticImage(imageUri)
     }
 
-    private fun moveToResult() {
+    /**
+     * Navigates to the ResultActivity with classification results.
+     *
+     * This function creates an intent to navigate from the MainActivity to the ResultActivity.
+     * It packages the classification results and the URI of the analyzed image as extras in the intent,
+     * then starts the ResultActivity to display the results.
+     *
+     * @param results The list of classification results obtained from analyzing the image.
+     *                Each result contains the predicted class label and confidence score.
+     */
+    private fun moveToResult(results: List<Classifications>?) {
+        // Extracts class labels and confidence scores from the classification results
+        val resultList = results?.map { classification ->
+            ResultItem(classification.categories[0].label, classification.categories[0].score)
+        }
+
+        // Create an intent to move to the ResultActivity
         val intent = Intent(this, ResultActivity::class.java)
+
+        // Passes the classification results and image URI as extras in the intent
+        intent.putParcelableArrayListExtra(ResultActivity.EXTRA_CLASSIFICATION_RESULTS, resultList as ArrayList<ResultItem>)
+        intent.putExtra(ResultActivity.EXTRA_IMAGE_URI, currentImageUri)
+
+        // Start the ResultActivity
         startActivity(intent)
     }
 
+    /**
+     * Displays a toast message.
+     *
+     * This function shows a toast message with the provided message string.
+     *
+     * @param message The message string to be displayed in the toast.
+     */
     private fun showToast(message: String) {
+        // Shows a toast message with the provided message string
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
     }
 }
