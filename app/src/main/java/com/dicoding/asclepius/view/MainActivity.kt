@@ -13,7 +13,9 @@ import com.dicoding.asclepius.R
 import com.dicoding.asclepius.databinding.ActivityMainBinding
 import com.dicoding.asclepius.helper.ImageClassifierHelper
 import com.dicoding.asclepius.models.ResultItem
+import com.yalantis.ucrop.UCrop
 import org.tensorflow.lite.task.vision.classifier.Classifications
+import java.io.File
 
 /**
  * The main activity of the application responsible for image selection and analysis.
@@ -62,17 +64,15 @@ class MainActivity : AppCompatActivity() {
      *
      * This variable registers an activity result launcher for picking visual media, such as images,
      * from the gallery. When an image is selected from the gallery, the launcher callback assigns
-     * the URI of the selected image to the currentImageUri property. It then triggers the display
-     * of the selected image. If no media is selected, a debug log message is printed.
+     * the URI of the selected image to the [currentImageUri] property. It then triggers the start
+     * of the uCrop activity with the selected image URI. If no media is selected, a debug log message
+     * is printed.
      */
     private val launcherGallery = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
         if (uri != null) {
-            // Assigns the URI of the selected image to the currentImageUri property
-            currentImageUri = uri
-            // Displays the selected image
-            showImage()
+            startUCrop(uri)
         } else {
             // Prints a debug log message if no media is selected
             Log.d("Photo Picker", "No media selected")
@@ -81,12 +81,16 @@ class MainActivity : AppCompatActivity() {
 
 
     /**
-     * Displays the captured image.
+     * Displays the selected image.
      *
-     * This function sets the captured image URI to the ImageView for preview.
-     * If the URI is not null, it logs the URI and updates the ImageView with the captured image.
+     * This method sets the provided image URI to the ImageView for preview.
+     * If the URI is not null, it logs the URI and updates the ImageView with the image.
+     *
+     * @param imageUri The URI of the selected image to be displayed.
      */
-    private fun showImage() {
+    private fun showImage(imageUri: Uri) {
+        currentImageUri = imageUri
+
         // Checks if the currentImageUri is not null
         currentImageUri?.let {
             // Logs the URI of the captured image
@@ -183,5 +187,53 @@ class MainActivity : AppCompatActivity() {
     private fun showToast(message: String) {
         // Shows a toast message with the provided message string
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Starts the uCrop activity to perform image cropping.
+     *
+     * This function initiates the uCrop activity with the selected image URI for cropping.
+     * It also allows customization of uCrop options such as crop aspect ratio, image format, etc.
+     *
+     * @param imageUri The URI of the selected image to be cropped.
+     */
+    private fun startUCrop(imageUri: Uri) {
+        // Configure uCrop options as needed
+        val options = UCrop.Options().apply {
+            // Set desired crop aspect ratio, image format, etc.
+        }
+
+        // Start uCrop activity with the selected image URI
+        UCrop.of(imageUri, Uri.fromFile(File.createTempFile("cropped", ".jpg", cacheDir)))
+            .withOptions(options)
+            .start(this)
+    }
+
+    /**
+     * Handles the result from the uCrop activity.
+     *
+     * This method is invoked when the uCrop activity returns a result.
+     * It checks if the requestCode matches the UCrop.REQUEST_CROP code and the resultCode is RESULT_OK,
+     * indicating a successful cropping operation. If successful, it retrieves the cropped image URI
+     * and handles it accordingly (e.g., displaying it in an ImageView).
+     * If there was an error during cropping, it retrieves the error message and displays a toast message.
+     *
+     * @param requestCode The request code passed to the activity for identification.
+     * @param resultCode The result code returned by the activity to indicate success or failure.
+     * @param data The intent containing the result data from the activity.
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == UCrop.REQUEST_CROP && resultCode == RESULT_OK) {
+            val croppedUri = UCrop.getOutput(data!!)
+            // Handle the cropped image URI
+            showImage(croppedUri!!)
+        } else if (resultCode == UCrop.RESULT_ERROR) {
+            val cropError = UCrop.getError(data!!)
+            // Handle any errors that occurred during cropping
+            showToast("Error cropping image: $cropError")
+        }
     }
 }
